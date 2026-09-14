@@ -5,6 +5,12 @@ program Pendulo_Doble_Elastico_Aura
 
     !Vectores de estado para cada metodo
     real(dp), dimension(8) :: M_euler, M_RK4, M_RK45
+   
+    !Variables para el Método de Heun 
+    real(dp), dimension(8) :: M_heun, k1_heun, k2_heun, M_temp_heun
+    
+     !Variables para guardar las Energias 
+    real(dp) :: E_euler, E_heun, E_RK4, E_RK45
 
     integer, parameter :: N = 8
 
@@ -41,7 +47,7 @@ program Pendulo_Doble_Elastico_Aura
     g = 9.81_dp
     t = 0.0_dp
     t_max = 10.0_dp
-    h = 0.0001_dp
+    h = 0.02_dp
     
 
     !Condiciones iniciales del vector de estado de Euler
@@ -57,6 +63,7 @@ program Pendulo_Doble_Elastico_Aura
 
     M_RK4 = M_euler
     M_RK45 = M_euler
+    M_heun = M_euler
 
     
 
@@ -71,7 +78,13 @@ open(unit=10, file="Pendulo_doble_elastico.txt", status='replace')
         call Matriz_Gigante(t, M_euler, k1)
         M_euler = M_euler + h * k1
 
-        !RK4 god
+       !Metodo de Heun
+        call Matriz_Gigante(t, M_heun, k1_heun)
+        M_temp_heun = M_heun + h * k1_heun
+        call Matriz_Gigante(t + h, M_temp_heun, k2_heun)
+        M_heun = M_heun + (h / 2.0_dp) * (k1_heun + k2_heun)
+       
+       !RK4 god
         call Matriz_Gigante(t, M_RK4, k1)
         
         M_temp_1 = M_RK4 + (h / 2.0_dp) * k1
@@ -86,12 +99,15 @@ open(unit=10, file="Pendulo_doble_elastico.txt", status='replace')
         !Promedio y actualizacion del estado RK4
         M_RK4 = M_RK4 + (h / 6.0_dp) * (k1 + 2.0_dp*k2 + 2.0_dp*k3 + k4)
 
-        
+        !CALCULANDO ENERGIAS
+        call Calcular_Energia(M_euler, E_euler)
+        call Calcular_Energia(M_heun, E_heun)
+        call Calcular_Energia(M_RK4, E_RK4)
+
         !Terminando ciclo
         t = t + h
         
-        write(10, *) t, M_euler, M_RK4
-
+  write(10, '(30(E25.15, 1X))') t, M_euler, M_heun, M_RK4, E_euler, E_heun, E_RK4
     end do
 
     close(10)
@@ -105,7 +121,11 @@ open(unit=10, file="Pendulo_doble_elastico.txt", status='replace')
 open(unit=11, file="Pendulo_RK45.txt", status='replace')
    
 do while (t_RK45 < t_max)
-    write(11, *) t_RK45, M_RK45
+
+!CALCULANDO ENERGIA PARA RK45 
+    call Calcular_Energia(M_RK45, E_RK45)
+
+  write(11, '(20(E25.15, 1X))') t_RK45, M_RK45, E_RK45
 
     !6 coeficientes de RK45
 
@@ -162,7 +182,7 @@ do while (t_RK45 < t_max)
 
     close(11)
 
-    print *, "Elpepe"
+    print *, "Elpepe2"
 
 Contains  
 !Subrutina de la matriz gigante
@@ -269,7 +289,42 @@ end do
             !Terminando subrutina
             dy(1:4) = Y(5:8) !Derivada posicion = velocidad
             dy(5:8) = Aura   !Derivada velocidad = aceleracion
+
+            
             end SUBROUTINE Matriz_Gigante
+
+            SUBROUTINE Calcular_Energia(Y, E_total)
+        implicit none
+        real(dp), dimension(8), intent(in) :: Y
+        real(dp), intent(out) :: E_total
+        
+        real(dp) :: R1, R2, Delta, v1_cuadrado, v2_cuadrado
+        real(dp) :: Energia_Cinetica, Energia_Potencial
+        
+        R1 = long_inicial_1 + Y(1)
+        R2 = long_inicial_2 + Y(3)
+        Delta = Y(2) - Y(4)
+        
+        ! Cuadrado de la velocidad 1 (v1^2 = dot_xi_1^2 + R1^2 * dot_theta_1^2)
+        v1_cuadrado = Y(5)**2 + (R1**2 * Y(6)**2)
+        
+        ! Cuadrado de la velocidad 2 expandida
+        v2_cuadrado = v1_cuadrado + Y(7)**2 + (R2**2 * Y(8)**2) &
+        + 2.0_dp * (Y(5) * Y(7) * cos(Delta) &
+        + Y(5) * R2 * Y(8) * sin(Delta) &
+        - R1 * Y(6) * Y(7) * sin(Delta) &
+        + R1 * Y(6) * R2 * Y(8) * cos(Delta))
+                      
+        Energia_Cinetica = 0.5_dp * m1 * v1_cuadrado + 0.5_dp * m2 * v2_cuadrado
+        
+        Energia_Potencial = 0.5_dp * k_resorte_1 * Y(1)**2 &
+        + 0.5_dp * k_resorte_2 * Y(3)**2 &
+        - (m1 + m2) * g * R1 * cos(Y(2)) &
+        - m2 * g * R2 * cos(Y(4))
+                          
+        E_total = Energia_Cinetica + Energia_Potencial
+        
+    end SUBROUTINE Calcular_Energia
 
 
 end program Pendulo_Doble_Elastico_Aura
